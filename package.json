@@ -1,0 +1,19 @@
+{
+  "name": "shell-e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/tui/index.ts",
+    "test": "python3 scripts/check.py",
+    "typecheck": "tsc --noEmit",
+    "doctor": "python3 scripts/doctor.py"
+  },
+  "dependencies": {
+    "@opentui/core": "0.6.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}

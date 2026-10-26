@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shell-e"
+version = "0.1.0"
+description = "A terminal natural language interface for Linux"
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.28,<1"]
+
+[project.scripts]
+shell-e-agent = "shell_e.bridge:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["shell_e*"]

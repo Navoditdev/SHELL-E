@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Terminal UI
+node_modules/
+dist/
+coverage/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Local setup tools
+.tools/
