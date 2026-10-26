@@ -48,7 +48,7 @@ class OllamaChat:
                                            f"Check OLLAMA_HOST and run: ollama pull {shlex.quote(self.model)}. {body}")
                     if "support" in body.lower() and "tool" in body.lower():
                         raise RuntimeError("The selected Ollama model does not support tool calling. "
-                                           "Set SHELL_E_MODEL to a tool-capable model, such as qwen3:4b.")
+                                           "Set SHELL_E_MODEL to an installed model that supports tool calling, such as qwen3.5:4b.")
                     raise RuntimeError(f"Ollama HTTP {response.status_code}: {body}")
                 async for line in response.aiter_lines():
                     if not line.strip():

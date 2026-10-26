@@ -8,7 +8,7 @@ import subprocess
 
 from ollama import Chat
 
-MODEL = os.getenv("SHH_MODEL", "qwen3:4b")
+MODEL = os.getenv("SHH_MODEL", "qwen3.5:4b")
 ROOT = Path.home().resolve()
 MAX_FILE_BYTES = 16_000
 MAX_TOOL_STEPS = 8

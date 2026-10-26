@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = ["httpx>=0.28,<1"]
 
 [project.scripts]
+shell-e = "shell_e.cli:main"
 shell-e-agent = "shell_e.bridge:main"
 
 [tool.setuptools.packages.find]

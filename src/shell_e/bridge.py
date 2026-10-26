@@ -21,7 +21,8 @@ class Bridge:
         self.approval_id = None
         self.context = ToolContext(config, config.workspace, self.approve,
                                    lambda stream, text: self.emit({"type": "output", "stream": stream, "text": text}))
-        self.agent = Agent(chat or OllamaChat(config.host, config.model), self.context, emit)
+        self.chat = chat or OllamaChat(config.host, config.model)
+        self.agent = Agent(self.chat, self.context, emit)
 
     def ready(self):
         self.emit({"type": "ready", "model": self.config.model, "cwd": str(self.context.cwd)})

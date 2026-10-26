@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -22,7 +23,10 @@ def main():
         print(f'{"OK" if ok else "MISSING"}: {label}: {detail}')
 
     report(sys.version_info >= (3, 11), 'Python', sys.version.split()[0])
-    httpx = importlib.util.find_spec('httpx') is not None
+    project_python = ROOT / '.venv/bin/python'
+    python = project_python if project_python.exists() else Path(sys.executable)
+    dependencies = subprocess.run([str(python), '-c', 'import httpx'], capture_output=True)
+    httpx = dependencies.returncode == 0
     report(httpx, 'Python dependencies', 'httpx available' if httpx else 'run python3 scripts/setup.py')
     local = ROOT / '.tools/node_modules/.bin/bun'
     bun = shutil.which('bun') or (str(local) if local.exists() else None)

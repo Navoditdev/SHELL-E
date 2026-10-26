@@ -12,16 +12,22 @@ supports tool calling.
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 bun install
-ollama pull qwen3:4b
-bun start
+ollama pull qwen3.5:4b
+.venv/bin/python -m pip install -e .
+.venv/bin/shell-e
 ```
 
+To use `shell-e` directly in your terminal, activate the project environment
+first (`source .venv/bin/activate`), then run `shell-e`. The editable install
+registers the command in `.venv/bin` and points it at this checkout. `bun start`
+remains available as an alternative.
+
 If Ollama is not already running, start `ollama serve` in another terminal.
-Shell-E defaults to the launch directory as its workspace. To select a different
-workspace or model:
+Shell-E uses the local model and does not download models automatically.
+To choose a different workspace or model:
 
 ```bash
-SHELL_E_WORKSPACE=/path/to/project SHELL_E_MODEL=qwen3:4b bun start
+SHELL_E_WORKSPACE=/path/to/project SHELL_E_MODEL=qwen3.5:4b bun start
 ```
 
 `OLLAMA_HOST` defaults to `http://127.0.0.1:11434`. The TUI uses `.venv/bin/python`

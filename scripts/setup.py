@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Install project-local dependencies, capture locks, and check the application."""
-import argparse
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,9 +14,6 @@ def run(args, **kwargs):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pull-model', action='store_true', help='Download the configured model through the running Ollama service')
-    args = parser.parse_args()
     python = ROOT / '.venv/bin/python'
     if not python.exists():
         run([sys.executable, '-m', 'venv', ROOT / '.venv'])
@@ -44,8 +39,6 @@ def main():
     run(install)
     run([python, 'scripts/check.py'])
     run([bun, 'run', 'typecheck'])
-    if args.pull_model:
-        run(['ollama', 'pull', os.environ.get('SHELL_E_MODEL', 'qwen3:4b')])
     run([python, 'scripts/doctor.py'])
     print('Setup complete. Start with: python3 scripts/start.py')
 

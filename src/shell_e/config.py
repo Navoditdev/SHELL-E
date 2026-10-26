@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 @dataclass(frozen=True)
 class Config:
     workspace: Path
-    model: str = "qwen3:4b"
+    model: str = "qwen3.5:4b"
     host: str = "http://127.0.0.1:11434"
     max_steps: int = 8
     timeout_ms: int = 30_000
@@ -24,4 +24,4 @@ class Config:
         parsed = urlparse(host)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("Invalid OLLAMA_HOST")
-        return cls(workspace=workspace, model=os.getenv("SHELL_E_MODEL", "qwen3:4b"), host=host)
+        return cls(workspace=workspace, model=os.getenv("SHELL_E_MODEL", "qwen3.5:4b"), host=host)

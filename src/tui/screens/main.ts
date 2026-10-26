@@ -19,7 +19,7 @@ export async function startTui() {
   const transcript = new TextRenderable(renderer, { content: log, width: "100%" });
   scroll.add(transcript);
   const status = new TextRenderable(renderer, { content: "Starting…", height: 1, fg: "#a3a3a3" });
-  const input = new InputRenderable(renderer, { width: "100%", height: 1, placeholder: "What would you like to do?", maxLength: 8000 });
+  const input = new InputRenderable(renderer, { width: "100%", placeholder: "What would you like to do?", maxLength: 8000 });
   layout.add(header); layout.add(scroll); layout.add(status); layout.add(input);
   renderer.root.add(layout);
   const append = (text: string) => {
@@ -51,8 +51,8 @@ export async function startTui() {
         break;
     }
   };
-  const backend = startBackend(onEvent, () => {
-    append("\nPython agent exited. Restart Shell-E to reconnect.\n");
+  const backend = startBackend(onEvent, (code, signal) => {
+    append(`\nPython agent exited (code ${code ?? "unknown"}${signal ? `, signal ${signal}` : ""}). Restart Shell-E to reconnect.\n`);
     status.content = "Backend stopped · Ctrl+C quit";
     busy = true; approval = undefined; input.blur();
   });
