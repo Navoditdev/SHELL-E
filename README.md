@@ -1,12 +1,26 @@
 # Shell-E
 
-A terminal-only natural language interface for Linux. Python handles the agent,
-Ollama, tools, and shell execution. TypeScript is used only for the OpenTUI UI.
+Shell-E is a terminal agent for Linux. You describe a task in plain language;
+the local Ollama model can inspect files and propose shell commands. Shell-E
+shows each command for approval before running it.
 
-## Run
+The application has two processes:
 
-Requires Linux, Python 3.11+, Bun, and a running Ollama service with a model that
-supports tool calling.
+- A TypeScript terminal UI, rendered by OpenTUI and launched with Bun.
+- A Python agent process, which talks to Ollama, validates tool requests, and
+  runs approved shell commands.
+
+## Requirements
+
+- Linux, Python 3.11 or newer, and Bash.
+- Bun and the project’s installed JavaScript dependencies.
+- Ollama running locally (or at a configured URL) with a model that supports
+  tool calling.
+
+## Install and run
+
+From the project checkout, create a Python environment, install the Python and
+JavaScript dependencies, pull a model, and install Shell-E’s command:
 
 ```bash
 python3 -m venv .venv
@@ -14,98 +28,158 @@ python3 -m venv .venv
 bun install
 ollama pull qwen3.5:4b
 .venv/bin/python -m pip install -e .
+```
+
+Make sure Ollama is running. If it is not already running as a service, start
+it in another terminal:
+
+```bash
+ollama serve
+```
+
+Then start Shell-E:
+
+```bash
 .venv/bin/shell-e
 ```
 
-To use `shell-e` directly in your terminal, activate the project environment
-first (`source .venv/bin/activate`), then run `shell-e`. The editable install
-registers the command in `.venv/bin` and points it at this checkout. `bun start`
-remains available as an alternative.
+After activating the environment with `source .venv/bin/activate`, you can run
+`shell-e` directly. The editable Python install creates that command and points
+it to this checkout. The launcher finds Bun on `PATH`, or falls back to
+`.tools/node_modules/.bin/bun` when it exists. It then changes to the checkout
+root and runs `src/tui/index.ts`.
 
-If Ollama is not already running, start `ollama serve` in another terminal.
-Shell-E uses the local model and does not download models automatically.
-To choose a different workspace or model:
+Other ways to launch the UI from the checkout are:
 
 ```bash
-SHELL_E_WORKSPACE=/path/to/project SHELL_E_MODEL=qwen3.5:4b bun start
+bun start
+python3 scripts/start.py
 ```
 
-`OLLAMA_HOST` defaults to `http://127.0.0.1:11434`. The TUI uses `.venv/bin/python`
-when available, or `python3`; override with `SHELL_E_PYTHON`. See `.env.example`
-for configuration names. The Python core reads environment variables; Bun can
-load a local `.env` file when launching the TUI.
+`bun start` runs the TUI directly. `scripts/start.py` uses the same launcher as
+the installed `shell-e` command. The launcher also supports `shell-e --help`
+and `shell-e --version`.
 
-## First version
+## What happens at startup
 
-- Conversational agent with Ollama streaming text and tool calling.
-- Workspace file listing, reading, and filename search.
-- Persistent session working directory.
-- Exact shell command, explanation, directory, and timeout shown for approval.
-- Live stdout/stderr and structured results including exit status.
-- Timeouts, output limits, cancellation, and process-group cleanup.
-- Conversation and tool history kept in memory during the session.
+1. The launcher starts Bun with the TypeScript UI entry point.
+2. The UI starts `python -u -m shell_e.bridge` as a child process. It uses
+   `.venv/bin/python` if present, otherwise `python3`; set `SHELL_E_PYTHON` to
+   choose a different interpreter.
+3. Python loads configuration, creates the agent and Ollama client, then sends
+   a `ready` event with the model and current directory.
+4. The UI and Python process exchange one JSON object per line over the child
+   process’s stdin and stdout. This is a local process connection; Shell-E does
+   not run an application web server.
+5. When you submit a task, Python sends the conversation to Ollama. The model
+   can answer with text or request one of Shell-E’s tools. File tools are
+   checked against the workspace. For a shell tool request, the UI displays
+   the command, explanation, working directory, and timeout and waits for your
+   approval.
+6. If approved, Python runs the command with noninteractive Bash and streams
+   output back into the UI. The result, including the exit status, is returned
+   to the model so it can continue or report back. Rejecting a command stops
+   the task and remaining tool calls from that response.
 
-Enter a task, then type `yes` or `no` when a command needs approval. Rejection
-stops the task, including remaining tool calls from that response. `Esc` cancels
-the current task, `Ctrl+C` exits, and `PgUp`/`PgDn` scroll the transcript.
-`/cd <path>` changes directory within the workspace, `/clear` clears conversation
-history, and `/exit` quits.
+The Python bridge handles the Ollama API requests. The UI only handles
+rendering, input, approvals, and the bridge protocol. See
+[`docs/protocol.md`](docs/protocol.md) for the message types.
 
-Commands run through noninteractive Bash with closed stdin. A `cd` inside a
-shell command affects that command only; the `change_directory` tool and `/cd`
-update the session directory. Interactive programs and sudo are not supported.
-Commands have a default 30-second timeout (maximum 120 seconds) and a combined
-32 KB output limit. Exceeding the output limit terminates the command. Background
-processes are cleaned up when the shell exits. Cancellation terminates the task
-and its command process group.
+## Configuration
 
-Workspace checks constrain file tools and directory changes. Approved Bash
-commands run with your user's permissions and can access paths outside the
-workspace; this version is not an OS sandbox.
+The Python process reads these environment variables:
 
-## Structure
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SHELL_E_WORKSPACE` | Current directory when the Python bridge starts | Root directory available to file tools and `/cd` |
+| `SHELL_E_MODEL` | `qwen3.5:4b` | Ollama model name |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server URL |
+| `SHELL_E_PYTHON` | `.venv/bin/python`, then `python3` | Python executable used by the UI |
+
+The Bun-launched UI loads `.env` values and passes them to Python. Copy
+`.env.example` to `.env` in the directory from which Bun starts, then edit the
+values as needed. For `shell-e` and `scripts/start.py`, that directory is the
+checkout root; for `bun start`, it is the current directory. For a one-off
+launch, set variables on the command line:
+
+```bash
+SHELL_E_WORKSPACE=/path/to/project \
+SHELL_E_MODEL=qwen3.5:4b \
+OLLAMA_HOST=http://127.0.0.1:11434 \
+.venv/bin/shell-e
+```
+
+The `shell-e` and `scripts/start.py` launchers change to the checkout root
+before starting Bun, so without `SHELL_E_WORKSPACE` their default workspace is
+the checkout. `bun start` keeps the current directory as its default
+workspace. Set `SHELL_E_WORKSPACE` to choose the workspace explicitly
+regardless of launch method.
+
+Shell-E uses the local model configured above; it does not download models
+automatically. Pull the selected model separately with `ollama pull <model>`.
+
+## Using the terminal UI
+
+Enter a task at the prompt. When Shell-E requests shell approval, type `yes` or
+`no` and press Enter. Other controls and commands:
+
+| Input | Action |
+| --- | --- |
+| `Esc` | Cancel the current task or command |
+| `Ctrl+C` | Exit Shell-E |
+| `PgUp` / `PgDn` | Scroll the transcript |
+| `/help` | Show available commands |
+| `/cd <path>` | Change the session directory within the workspace |
+| `/clear` | Clear the transcript and conversation history |
+| `/exit` or `/quit` | Exit Shell-E |
+
+Unknown slash commands are reported and are not sent to the model. A `cd` in a
+shell command only affects that command; use `/cd` or the model’s
+`change_directory` tool to change the session directory.
+
+## Command execution and limits
+
+Approved commands run in noninteractive Bash with stdin closed. Interactive
+programs and `sudo` are not supported. Commands default to a 30-second timeout
+and can request at most 120 seconds. Combined stdout and stderr are limited to
+32 KB; exceeding the limit terminates the command. Shell background processes
+are cleaned up when the command ends. Cancelling a task terminates its command
+process group.
+
+File tools and directory changes are restricted to the configured workspace.
+Approved Bash commands run with your user’s permissions and can access paths
+outside that workspace. Workspace checks are not an operating system sandbox;
+review commands before approving them.
+
+The conversation and tool history are kept in memory for the session. `/clear`
+resets that history.
+
+## Project layout
 
 ```text
-shell-e/
-├── exp.py                     # Original Python experiment, unchanged
-├── src/
-│   ├── shell_e/               # Python core
-│   │   ├── config.py          # Workspace, model, host, and limits
-│   │   ├── agent.py           # Agent loop and conversation history
-│   │   ├── ollama.py          # Streaming Ollama chat adapter
-│   │   ├── tools.py           # Tool schemas, validation, and dispatch
-│   │   ├── execution.py       # Bash subprocess lifecycle and output
-│   │   ├── safety.py          # Workspace path checks
-│   │   └── bridge.py          # Local stdin/stdout JSON protocol
-│   └── tui/                   # TypeScript OpenTUI interface
-│       ├── index.ts           # UI entry point
-│       ├── screens/main.ts    # Conversation, approval, and output
-│       ├── state/backend.ts   # Python subprocess connection
-│       ├── components/        # Space for reusable UI controls
-│       └── theme/             # Space for terminal theme definitions
-├── tests/                     # Python unittest tests
-├── docs/protocol.md           # UI/core message protocol
-├── scripts/                   # Development helpers
-├── pyproject.toml             # Python package definition
-├── requirements.txt           # Python runtime dependencies
-└── package.json               # OpenTUI dependencies and Bun scripts
+src/shell_e/       Python agent, Ollama client, tools, safety checks, and bridge
+src/tui/           TypeScript OpenTUI application
+scripts/           Setup, launch, checks, and diagnostics
+docs/protocol.md   UI-to-Python JSON-lines protocol
+tests/             Python and UI helper tests
+pyproject.toml     Python package and command entry points
+package.json       Bun scripts and OpenTUI dependency
 ```
 
-The TUI launches the Python core as a child process. JSON lines over stdin/stdout
-carry prompts, approvals, cancellation, and agent events. There is no application
-HTTP server; only Python's Ollama adapter makes model requests.
-
 ## Development
+
+Run the checks from the checkout:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 bun run typecheck
 ```
 
-The Python tests run without third-party dependencies. They cover the core,
-process cleanup, the Ollama adapter with a fake HTTP client, and the real Python
-bridge subprocess. Live Ollama and terminal rendering require separate smoke
-checks after dependency installation.
+`python3 scripts/check.py` runs the Python and UI helper tests. `bun run doctor`
+reports missing local runtime dependencies, Ollama availability, and whether
+the configured model is installed. `python3 scripts/setup.py` can create the
+project virtual environment, install dependencies, capture resolved lock
+files, and run the checks and diagnostics.
 
-References: [OpenTUI](https://opentui.com/docs/getting-started/quickstart/) and
-[Ollama tool calling](https://docs.ollama.com/capabilities/tool-calling).
+Live Ollama behavior and terminal rendering need a running Ollama service and a
+real terminal; the automated checks do not exercise those.

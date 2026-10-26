@@ -29,7 +29,7 @@ export async function startTui() {
   const ready = (cwd: string) => {
     busy = false; approval = undefined;
     header.content = visible(`Shell-E · ${model}\n${cwd}`);
-    status.content = "Ready · Esc cancel · Ctrl+C quit · PgUp/PgDn scroll · /clear · /cd <path>";
+    status.content = "Ready · Esc cancel · Ctrl+C quit · /help";
     input.placeholder = "What would you like to do?"; input.focus();
   };
   const onEvent = (event: BackendEvent) => {
@@ -42,7 +42,10 @@ export async function startTui() {
       case "output": append(`\n[${event.stream}] ${event.text}`); break;
       case "tool": append(`\n[tool] ${event.name} ${JSON.stringify(event.arguments)}\n`); break;
       case "result": append(`\n[result] ${formatResult(event.name, event.result)}\n`); break;
-      case "error": append(`\nError: ${event.text}\n`); break;
+      case "error":
+        append(`\nError: ${event.text}\n`);
+        busy = false; approval = undefined; status.content = "Ready · Type /help for commands"; input.focus();
+        break;
       case "approval":
         approval = event.id;
         append(`\nAPPROVAL REQUIRED\nDirectory: ${event.cwd}\nTimeout: ${event.timeout_ms}ms\nReason: ${event.explanation}\n$ ${event.command}\n`);
@@ -80,11 +83,24 @@ export async function startTui() {
       approval = undefined; input.blur(); status.content = "Working…"; return;
     }
     if (busy || !prompt) return;
-    if (prompt === "/exit") { shutdown(); return; }
+    if (prompt === "/exit" || prompt === "/quit") { shutdown(); return; }
+    if (prompt === "/help") {
+      append("\nCommands: /help, /cd <directory>, /clear, /exit\n");
+      return;
+    }
     if (prompt === "/clear") {
       log = ""; transcript.content = ""; backend.send({ type: "reset" }); return;
     }
-    if (prompt.startsWith("/cd ")) { backend.send({ type: "cd", path: prompt.slice(4).trim() }); return; }
+    if (prompt === "/cd" || prompt.startsWith("/cd ")) {
+      const path = prompt.slice(3).trim();
+      if (!path) { append("\nUsage: /cd <directory>\n"); return; }
+      busy = true; input.blur(); status.content = "Changing directory…";
+      backend.send({ type: "cd", path }); return;
+    }
+    if (prompt.startsWith("/")) {
+      append(`\nUnknown command: ${prompt.split(/\s/, 1)[0]}. Type /help for commands.\n`);
+      return;
+    }
     busy = true; input.blur(); status.content = "Thinking…";
     append(`\nYou: ${prompt}\nShell-E: `);
     backend.send({ type: "prompt", text: prompt });
