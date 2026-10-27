@@ -1,13 +1,10 @@
 import asyncio
 import json
-import os
 from pathlib import Path
-import sys
 import tempfile
 import unittest
 
 from shell_e.agent import Agent
-from shell_e.bridge import Bridge
 from shell_e.config import Config
 from shell_e.ollama import OllamaChat
 from shell_e.tools import ToolContext
@@ -41,77 +38,6 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(agent.messages), 4)
         await agent.run('Hello')
         self.assertEqual(len(agent.messages), 6)
-
-    async def test_bridge_approval_ids_rejection_and_cancellation(self):
-        async def chat(*_):
-            return {'role': 'assistant', 'content': '', 'tool_calls': [
-                {'function': {'name': 'execute_command', 'arguments': {'command': 'touch forbidden', 'explanation': 'test'}}},
-                {'function': {'name': 'execute_command', 'arguments': {'command': 'touch second', 'explanation': 'test'}}}]}
-
-        bridge = Bridge(Config(self.root), self.events.append, chat)
-        await bridge.handle({'type': 'prompt', 'text': 'test'})
-        await asyncio.sleep(0)
-        approval_id = bridge.approval_id
-        self.assertIsNotNone(approval_id)
-        await bridge.handle({'type': 'approval', 'id': 'stale', 'approved': True})
-        self.assertFalse(bridge.approval.done())
-        await bridge.handle({'type': 'approval', 'id': approval_id, 'approved': False})
-        task = bridge.task
-        await task
-        self.assertFalse((self.root / 'forbidden').exists())
-        self.assertFalse((self.root / 'second').exists())
-        self.assertEqual(bridge.agent.messages[-1]['role'], 'tool')
-        await bridge.handle({'type': 'prompt', 'text': 'again'})
-        await asyncio.sleep(0)
-        task = bridge.task
-        await bridge.handle({'type': 'cancel'})
-        await task
-        self.assertIsNone(bridge.approval)
-        self.assertFalse(bridge.agent.busy)
-        self.assertEqual(self.events[-1]['type'], 'done')
-
-    async def test_bridge_executes_only_after_approval(self):
-        turns = 0
-
-        async def chat(*_):
-            nonlocal turns
-            turns += 1
-            if turns == 1:
-                return {'role': 'assistant', 'content': '', 'tool_calls': [
-                    {'function': {'name': 'execute_command', 'arguments': {'command': 'printf approved', 'explanation': 'test'}}}]}
-            return {'role': 'assistant', 'content': 'Done'}
-
-        bridge = Bridge(Config(self.root), self.events.append, chat)
-        await bridge.handle({'type': 'prompt', 'text': 'test'})
-        await asyncio.sleep(0)
-        self.assertFalse(any(e['type'] == 'output' for e in self.events))
-        await bridge.handle({'type': 'approval', 'id': bridge.approval_id, 'approved': True})
-        await bridge.task
-        self.assertTrue(any(e.get('text') == 'approved' for e in self.events))
-
-    async def test_bridge_subprocess_startup_cd_and_shutdown(self):
-        process = await asyncio.create_subprocess_exec(
-            sys.executable, '-m', 'shell_e.bridge', stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, 'SHELL_E_WORKSPACE': str(self.root)},
-        )
-        try:
-            ready = json.loads(await asyncio.wait_for(process.stdout.readline(), 2))
-            self.assertEqual(ready['type'], 'ready')
-            (self.root / 'nested').mkdir()
-            process.stdin.write(b'{"type":"cd","path":"nested"}\n')
-            await process.stdin.drain()
-            ready = json.loads(await asyncio.wait_for(process.stdout.readline(), 2))
-            self.assertEqual(ready['cwd'], str(self.root / 'nested'))
-            process.stdin.write(b'{"type":"shutdown"}\n')
-            await process.stdin.drain()
-            await asyncio.wait_for(process.wait(), 2)
-            self.assertEqual(process.returncode, 0, (await process.stderr.read()).decode())
-        finally:
-            if process.returncode is None:
-                process.kill()
-                await process.wait()
-
 
 class FakeResponse:
     status_code = 200

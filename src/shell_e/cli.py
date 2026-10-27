@@ -1,38 +1,68 @@
-"""Command line entry point for the Shell-E terminal UI."""
+"""Small interactive shell around the Python agent loop."""
 import argparse
-import os
-from pathlib import Path
-import shutil
+import asyncio
+import sys
+
+from .agent import Agent
+from .config import Config
+from .execution import CommandRequest
+from .ollama import OllamaChat
+from .tools import ToolContext
 
 
-def project_root() -> Path:
-    """Return the checkout root containing the TUI entry point."""
-    return Path(__file__).resolve().parents[2]
+def print_text(text):
+    print(text, end="", flush=True)
 
 
-def find_bun(root: Path) -> str | None:
-    """Find Bun on PATH or in the optional project-local tools directory."""
-    bun = shutil.which("bun")
-    local_bun = root / ".tools/node_modules/.bin/bun"
-    if not bun and local_bun.is_file() and os.access(local_bun, os.X_OK):
-        bun = str(local_bun)
-    return bun
+async def run():
+    config = Config.from_env()
+
+    async def approve(request: CommandRequest) -> bool:
+        print("\n\nCommand needs approval")
+        print(f"Directory: {request.cwd}")
+        print(f"Reason: {request.explanation}")
+        print(f"$ {request.command}")
+        try:
+            answer = input("Run it? [y/N] ").strip().lower()
+        except EOFError:
+            return False
+        return answer in {"y", "yes"}
+
+    context = ToolContext(config, config.workspace, approve,
+                          lambda _stream, text: print_text(text))
+    agent = Agent(OllamaChat(config.host, config.model), context,
+                  lambda event: print_text(event.get("text", "")) if event["type"] == "text" else None)
+    print(f"Shell-E · {config.model}\nWorkspace: {config.workspace}")
+    print("Enter a task, /clear to reset history, or /quit to exit.\n")
+
+    while True:
+        try:
+            prompt = input("You> ").strip()
+            if prompt in {"/quit", "/exit"}:
+                return
+            if prompt == "/clear":
+                agent.reset()
+                print("Conversation cleared.\n")
+                continue
+            if not prompt:
+                continue
+            print("Agent> ", end="", flush=True)
+            await agent.run(prompt)
+            print("\n")
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            return
+        except Exception as exc:
+            print(f"\nError: {exc}\n", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Start the Shell-E terminal agent.")
+    parser = argparse.ArgumentParser(description="Run the Shell-E terminal agent.")
     parser.add_argument("--version", action="version", version="shell-e 0.1.0")
     parser.parse_args(argv)
-
-    root = project_root()
-    bun = find_bun(root)
-    if not bun:
-        parser.exit(1, "Bun is missing. Install Bun and run `bun install` in the Shell-E project.\n")
-    entry = root / "src/tui/index.ts"
-    if not entry.is_file():
-        parser.exit(1, f"Shell-E UI entry point is missing: {entry}\n")
-    os.chdir(root)
     try:
-        os.execv(bun, [bun, str(entry)])
-    except OSError as exc:
-        parser.exit(1, f"Could not start Bun ({bun}): {exc}\n")
+        asyncio.run(run())
+    except (KeyboardInterrupt, BrokenPipeError):
+        pass
+    except Exception as exc:
+        parser.exit(1, f"shell-e: {exc}\n")

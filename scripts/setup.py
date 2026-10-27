@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Install project-local dependencies, capture locks, and check the application."""
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 
@@ -22,25 +21,9 @@ def main():
     # Record the actual resolver output, never invent package versions or hashes.
     resolved = subprocess.check_output([str(python), '-m', 'pip', 'freeze'], cwd=ROOT, text=True)
     (ROOT / 'requirements.lock').write_text(resolved)
-    bun = shutil.which('bun')
-    local_bun = ROOT / '.tools/node_modules/.bin/bun'
-    if not bun and local_bun.exists():
-        bun = str(local_bun)
-    if not bun:
-        npm = shutil.which('npm')
-        if not npm:
-            raise RuntimeError('Install Bun or npm, then rerun setup.')
-        run([npm, 'install', '--prefix', ROOT / '.tools', 'bun', '--fetch-retries=0', '--fetch-timeout=15000'])
-        bun = str(local_bun)
-    # Bun generates bun.lock on the first successful resolution.
-    install = [bun, 'install']
-    if (ROOT / 'bun.lock').exists():
-        install.append('--frozen-lockfile')
-    run(install)
     run([python, 'scripts/check.py'])
-    run([bun, 'run', 'typecheck'])
     run([python, 'scripts/doctor.py'])
-    print('Setup complete. Start with: python3 scripts/start.py')
+    print('Setup complete. Start with: .venv/bin/shell-e')
 
 
 if __name__ == '__main__':

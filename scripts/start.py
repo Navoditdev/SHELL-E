@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch the Shell-E terminal UI from a source checkout."""
+"""Launch Shell-E from a source checkout."""
 from pathlib import Path
 import sys
 

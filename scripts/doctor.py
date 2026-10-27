@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Report all local runtime blockers without modifying the machine."""
-import importlib.util
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import urllib.error
@@ -28,11 +26,6 @@ def main():
     dependencies = subprocess.run([str(python), '-c', 'import httpx'], capture_output=True)
     httpx = dependencies.returncode == 0
     report(httpx, 'Python dependencies', 'httpx available' if httpx else 'run python3 scripts/setup.py')
-    local = ROOT / '.tools/node_modules/.bin/bun'
-    bun = shutil.which('bun') or (str(local) if local.exists() else None)
-    report(bool(bun), 'Bun', bun or 'run python3 scripts/setup.py')
-    report((ROOT / 'node_modules/@opentui/core/package.json').exists(), 'OpenTUI', 'dependency installation')
-    report((ROOT / 'bun.lock').exists(), 'UI dependency lock', 'bun.lock')
     report((ROOT / 'requirements.lock').exists(), 'Python dependency lock', 'requirements.lock')
     config = Config.from_env()
     try:
